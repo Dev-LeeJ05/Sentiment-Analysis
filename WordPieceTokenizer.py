@@ -96,6 +96,9 @@ class WordPieceTokenizer:
             start = end
         return output_tokens
 
+    def get_vocab_size(self):
+        return len(self.vocab)
+    
     def tokenize(self, text):
         if self.clean_text:
             text = self._clean_text(text)

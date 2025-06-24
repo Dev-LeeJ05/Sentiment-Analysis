@@ -48,7 +48,9 @@ class Transformer(nn.Module):
         padding_mask = (attention_mask == 0)
         transformer_output = self.transformer_encoder(embedded, src_key_padding_mask=padding_mask)
         cls_output = transformer_output[:,0,:]
-        output = self.fc_out(self.dropout(cls_output))
+        x = self.dropout(cls_output)
+        
+        output = self.fc_out(x)
         return output
 
 

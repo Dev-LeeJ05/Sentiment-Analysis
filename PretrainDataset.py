@@ -1,69 +1,135 @@
 import torch
-import random
 from torch.utils.data import Dataset
+import random
+
+class TokenizedDataset(Dataset):
+    def __init__(self, hf_dataset):
+        self.hf_dataset = hf_dataset
+
+    def __len__(self):
+        return len(self.hf_dataset)
+
+    def __getitem__(self, idx):
+        item = self.hf_dataset[idx]
+        processed_item = {}
+        for k, v in item.items():
+            if isinstance(v, (int, float, bool)):
+                processed_item[k] = torch.tensor([v], dtype=torch.long)
+            elif isinstance(v, list) and not v:
+                processed_item[k] = torch.tensor([], dtype=torch.long)
+            elif isinstance(v, list):
+                processed_item[k] = torch.tensor(v, dtype=torch.long)
+            elif isinstance(v, torch.Tensor):
+                if v.ndim == 0:
+                    processed_item[k] = v.unsqueeze(0)
+                else:
+                    processed_item[k] = v
+            else:
+                processed_item[k] = torch.tensor(v, dtype=torch.long)
+        return processed_item
+
+import torch
+import random
 
 class CustomDataCollatorForMLM:
     def __init__(self, tokenizer, mlm_probability=0.15):
         self.tokenizer = tokenizer
         self.mlm_probability = mlm_probability
-        self.special_tokens_mask_ids = set([
-            tokenizer.cls_token_id,
-            tokenizer.sep_token_id,
-            tokenizer.pad_token_id,
-        ])
+        self.special_tokens_mask = [
+            self.tokenizer.cls_token_id,
+            self.tokenizer.sep_token_id,
+            self.tokenizer.pad_token_id,
+            self.tokenizer.unk_token_id,
+        ]
 
     def __call__(self, examples):
-        batch = {}
-        input_ids_list = []
-        attention_mask_list = []
-        token_type_ids_list = []
+        print(f"__call__ method called with {len(examples)} examples.")
+        print(f"First example input_ids numel before filter: {examples[0]['input_ids'].numel() if examples else 'No examples'}")
 
-        for example in examples:
-            input_ids_list.append(example["input_ids"])
-            attention_mask_list.append(example["attention_mask"])
-            token_type_ids_list.append(example["token_type_ids"])
+        filtered_examples = [ex for ex in examples if ex['input_ids'].numel() > 0]
         
-        input_ids = torch.tensor(input_ids_list, dtype=torch.long)
-        attention_mask = torch.tensor(attention_mask_list, dtype=torch.long)
-        token_type_ids = torch.tensor(token_type_ids_list, dtype=torch.long)
+        if not filtered_examples:
+            print(f"Warning: filtered_examples is empty. Returning empty batch. (This is likely the problem cause!)")
+            return {
+                "input_ids": torch.tensor([], dtype=torch.long),
+                "attention_mask": torch.tensor([], dtype=torch.long),
+                "token_type_ids": torch.tensor([], dtype=torch.long),
+                "labels": torch.tensor([], dtype=torch.long),
+            }
 
-        inputs, labels = self.mask_tokens(input_ids)
+        max_length = max([len(ex['input_ids']) for ex in filtered_examples])
+
+        batch_input_ids = []
+        batch_attention_mask = []
+        batch_token_type_ids = []
+
+        for ex in filtered_examples:
+            input_ids = ex['input_ids']
+            attention_mask = ex['attention_mask']
+            token_type_ids = ex['token_type_ids']
+
+            padding_length = max_length - len(input_ids)
+            input_ids = torch.cat([input_ids, torch.full((padding_length,), self.tokenizer.pad_token_id, dtype=torch.long)])
+            attention_mask = torch.cat([attention_mask, torch.zeros(padding_length, dtype=torch.long)])
+            token_type_ids = torch.cat([token_type_ids, torch.zeros(padding_length, dtype=torch.long)])
+
+            batch_input_ids.append(input_ids)
+            batch_attention_mask.append(attention_mask)
+            batch_token_type_ids.append(token_type_ids)
         
-        batch["input_ids"] = inputs
-        batch["attention_mask"] = attention_mask
-        batch["token_type_ids"] = token_type_ids
-        batch["labels"] = labels
-        return batch
+        input_ids = torch.stack(batch_input_ids)
+        attention_mask = torch.stack(batch_attention_mask)
+        token_type_ids = torch.stack(batch_token_type_ids)
+
+        input_ids, labels = self.mask_tokens(input_ids)
+
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "token_type_ids": token_type_ids,
+            "labels": labels,
+        }
 
     def mask_tokens(self, inputs: torch.Tensor):
         labels = inputs.clone()
-        probability_matrix = torch.full(labels.shape, self.mlm_probability)
         
-        for i in range(labels.shape[0]):
-            special_tokens_mask = torch.tensor([
-                1 if labels[i, j].item() in self.special_tokens_mask_ids else 0
-                for j in range(labels.shape[1])
-            ], dtype=torch.bool)
-            probability_matrix[i].masked_fill_(special_tokens_mask, value=0.0)
+        print(f"--- Mask Tokens Debug ---")
+        print(f"Inputs shape: {inputs.shape}, Inputs example: {inputs[0, :10]}")
+        print(f"Labels initial shape: {labels.shape}, Labels initial example: {labels[0, :10]}")
+        
+        probability_matrix = torch.full_like(labels, self.mlm_probability, dtype=torch.float)
+        
+        special_tokens_tensor = torch.tensor(self.special_tokens_mask, device=inputs.device)
+        is_special_token_mask = torch.isin(inputs, special_tokens_tensor)
+        
+        print(f"Is special token mask shape: {is_special_token_mask.shape}")
+        print(f"Count of special tokens: {is_special_token_mask.sum().item()}")
+        
+        probability_matrix.masked_fill_(is_special_token_mask, 0.0)
+        
+        print(f"Probability matrix (after special tokens mask) min: {probability_matrix.min().item()}")
+        print(f"Probability matrix (after special tokens mask) max: {probability_matrix.max().item()}")
 
         masked_indices = torch.bernoulli(probability_matrix).bool()
+        
+        print(f"Masked indices shape: {masked_indices.shape}")
+        print(f"Count of tokens to be masked (should be > 0): {masked_indices.sum().item()}")
+        
         labels[~masked_indices] = -100
+        
+        print(f"Labels after masking (check for -100 and other values): {labels[0, :10]}")
+        # print(f"Labels unique after masking: {torch.unique(labels)}") # 전체 배치에서 유니크 값 확인
 
-        indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
+        indices_replaced = torch.bernoulli(torch.full_like(labels, 0.8, dtype=torch.float)).bool() & masked_indices
         inputs[indices_replaced] = self.tokenizer.mask_token_id
+        
+        print(f"Count of tokens replaced with [MASK]: {indices_replaced.sum().item()}")
 
-        indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-        random_words = torch.randint(len(self.tokenizer.vocab), labels.shape, dtype=torch.long)
+        indices_random = torch.bernoulli(torch.full_like(labels, 0.5, dtype=torch.float)).bool() & masked_indices & ~indices_replaced
+        random_words = torch.randint(self.tokenizer.get_vocab_size(), labels.shape, dtype=torch.long, device=inputs.device)
         inputs[indices_random] = random_words[indices_random]
 
+        print(f"Count of tokens replaced with random word: {indices_random.sum().item()}")
+        print(f"--- End Mask Tokens Debug ---\n")
+
         return inputs, labels
-
-class TokenizedDataset(Dataset):
-    def __init__(self, data):
-        self.data = data
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        return self.data[idx]

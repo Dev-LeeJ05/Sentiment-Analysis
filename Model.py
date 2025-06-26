@@ -78,3 +78,24 @@ class LSTM(nn.Module):
             h = self.dropout(h[-1,:,:])
         x = self.f(h)
         return x
+
+class SentimentClassifier(nn.Module):
+    def __init__(self, bert_encoder, num_labels):
+        super(SentimentClassifier,self).__init__()
+        self.bert = bert_encoder
+        self.classifier = nn.Linear(self.bert.config.hidden_size, num_labels)
+        self.dropout = nn.Dropout(0.1)
+
+    def forward(self, input_ids, attention_mask, token_type_ids):
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            return_dict=False
+        )
+        pooled_output = outputs[0][:, 0]
+        pooled_output = self.dropout(pooled_output)
+
+        logits = self.classifier(pooled_output)
+
+        return logits

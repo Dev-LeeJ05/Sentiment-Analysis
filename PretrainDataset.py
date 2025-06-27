@@ -118,7 +118,6 @@ class CustomDataCollatorForMLM:
         labels[~masked_indices] = -100
         
         print(f"Labels after masking (check for -100 and other values): {labels[0, :10]}")
-        # print(f"Labels unique after masking: {torch.unique(labels)}") # 전체 배치에서 유니크 값 확인
 
         indices_replaced = torch.bernoulli(torch.full_like(labels, 0.8, dtype=torch.float)).bool() & masked_indices
         inputs[indices_replaced] = self.tokenizer.mask_token_id

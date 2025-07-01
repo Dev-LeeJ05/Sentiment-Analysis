@@ -187,14 +187,25 @@ class BertLMPredictionHead(nn.Module):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states) + self.bias
         return hidden_states
-    
+
+class CustomBertConfig():
+    def __init__(self,VOCAB_SIZE,HIDDEN_SIZE,NUM_HIDDEN_LAYERS,NUM_ATTENTION_HEADS,INTERMEDIATE_SIZE,MAX_SEQUENCE_LENGTH,TYPE_VOCAB_SIZE,DROPOUT_PROB):
+        self.vocab_size = VOCAB_SIZE
+        self.hidden_size = HIDDEN_SIZE
+        self.num_hidden_layers = NUM_HIDDEN_LAYERS
+        self.num_attention_heads = NUM_ATTENTION_HEADS
+        self.intermediate_size = INTERMEDIATE_SIZE
+        self.max_position_embeddings = MAX_SEQUENCE_LENGTH
+        self.type_vocab_size = TYPE_VOCAB_SIZE
+        self.dropout_prob = DROPOUT_PROB
+
 class CustomBertForMaskedLM(nn.Module):
-    def __init__(self, vocab_size, hidden_size, num_hidden_layers, num_attention_heads, intermediate_size, max_position_embeddings, type_vocab_size,dropout_prob):
+    def __init__(self, config : CustomBertConfig):
         super().__init__()
-        self.embeddings = BertEmbeddings(vocab_size, hidden_size, max_position_embeddings,type_vocab_size,dropout_prob)
-        self.encoder = BertEncoder(num_hidden_layers, hidden_size,num_attention_heads, intermediate_size, dropout_prob)
-        self.pooler = BertPooler(hidden_size)
-        self.cls = BertLMPredictionHead(hidden_size, vocab_size)
+        self.embeddings = BertEmbeddings(config.vocab_size, config.hidden_size, config.max_position_embeddings,config.type_vocab_size,config.dropout_prob)
+        self.encoder = BertEncoder(config.num_hidden_layers, config.hidden_size,config.num_attention_heads, config.intermediate_size, config.dropout_prob)
+        self.pooler = BertPooler(config.hidden_size)
+        self.cls = BertLMPredictionHead(config.hidden_size, config.vocab_size)
 
         self.apply(self._init_weights)
         if hasattr(self.embeddings, 'word_embeddings') and self.embeddings.word_embeddings.weight is not None:
@@ -238,3 +249,5 @@ class CustomBertForMaskedLM(nn.Module):
             "logits" : prediction_scores,
             "loss": loss
         }
+
+

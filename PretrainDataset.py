@@ -43,13 +43,10 @@ class CustomDataCollatorForMLM:
         ]
 
     def __call__(self, examples):
-        print(f"__call__ method called with {len(examples)} examples.")
-        print(f"First example input_ids numel before filter: {examples[0]['input_ids'].numel() if examples else 'No examples'}")
 
         filtered_examples = [ex for ex in examples if ex['input_ids'].numel() > 0]
         
         if not filtered_examples:
-            print(f"Warning: filtered_examples is empty. Returning empty batch. (This is likely the problem cause!)")
             return {
                 "input_ids": torch.tensor([], dtype=torch.long),
                 "attention_mask": torch.tensor([], dtype=torch.long),
@@ -93,42 +90,21 @@ class CustomDataCollatorForMLM:
     def mask_tokens(self, inputs: torch.Tensor):
         labels = inputs.clone()
         
-        print(f"--- Mask Tokens Debug ---")
-        print(f"Inputs shape: {inputs.shape}, Inputs example: {inputs[0, :10]}")
-        print(f"Labels initial shape: {labels.shape}, Labels initial example: {labels[0, :10]}")
-        
         probability_matrix = torch.full_like(labels, self.mlm_probability, dtype=torch.float)
         
         special_tokens_tensor = torch.tensor(self.special_tokens_mask, device=inputs.device)
         is_special_token_mask = torch.isin(inputs, special_tokens_tensor)
         
-        print(f"Is special token mask shape: {is_special_token_mask.shape}")
-        print(f"Count of special tokens: {is_special_token_mask.sum().item()}")
-        
         probability_matrix.masked_fill_(is_special_token_mask, 0.0)
-        
-        print(f"Probability matrix (after special tokens mask) min: {probability_matrix.min().item()}")
-        print(f"Probability matrix (after special tokens mask) max: {probability_matrix.max().item()}")
-
         masked_indices = torch.bernoulli(probability_matrix).bool()
         
-        print(f"Masked indices shape: {masked_indices.shape}")
-        print(f"Count of tokens to be masked (should be > 0): {masked_indices.sum().item()}")
-        
         labels[~masked_indices] = -100
-        
-        print(f"Labels after masking (check for -100 and other values): {labels[0, :10]}")
 
         indices_replaced = torch.bernoulli(torch.full_like(labels, 0.8, dtype=torch.float)).bool() & masked_indices
         inputs[indices_replaced] = self.tokenizer.mask_token_id
-        
-        print(f"Count of tokens replaced with [MASK]: {indices_replaced.sum().item()}")
 
         indices_random = torch.bernoulli(torch.full_like(labels, 0.5, dtype=torch.float)).bool() & masked_indices & ~indices_replaced
         random_words = torch.randint(self.tokenizer.get_vocab_size(), labels.shape, dtype=torch.long, device=inputs.device)
         inputs[indices_random] = random_words[indices_random]
-
-        print(f"Count of tokens replaced with random word: {indices_random.sum().item()}")
-        print(f"--- End Mask Tokens Debug ---\n")
 
         return inputs, labels

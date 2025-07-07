@@ -186,5 +186,4 @@ saves/
 my_pretrained_bert_model_mlm_custom_tokenizer/
 Pretrained/
 *.pt
-*.pt
-Sentiment.pt
+*.pth

@@ -14,7 +14,7 @@ def SaveDataFrameTextsTo_txt(dataframe, text_column_name, output_file_path):
 
 def GenerateVocab(files,vocab_size,min_frequency,special_tokens,output_dir):
     tokenizer = BertWordPieceTokenizer(
-        clean_text=True,
+        clean_text=False,
         handle_chinese_chars=False,
         strip_accents=False,
         lowercase=False,

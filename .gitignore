@@ -187,3 +187,4 @@ my_pretrained_bert_model_mlm_custom_tokenizer/
 Pretrained/
 *.pt
 *.pth
+*.onnx

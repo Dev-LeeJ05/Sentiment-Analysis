@@ -4,7 +4,7 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import math
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, dropout_p=0.1, max_len=512):
+    def __init__(self, d_model, dropout_p=0.4, max_len=128):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout_p)
 
@@ -21,7 +21,7 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 class Transformer(nn.Module):
-    def __init__(self, vocab_size,embedding_dim, hidden_dim, output_dim, n_layers,n_heads,dropout_p=0.1,max_len=512,pad_token_id=0):
+    def __init__(self, vocab_size,embedding_dim, hidden_dim, output_dim, n_layers,n_heads,dropout_p=0.4,max_len=128,pad_token_id=0):
         super().__init__()
         self.d_model = embedding_dim
         self.n_heads = n_heads

@@ -34,7 +34,6 @@ class WordPieceTokenizer:
         if self.mask_token_id == -1:
             print(f"'{self.mask_token}' 토큰이 vocab에 없습니다.")
 
-
     def _load_vocab(self, vocab_file_path):
         vocab = {}
         with open(vocab_file_path, "r", encoding="utf-8") as reader:
